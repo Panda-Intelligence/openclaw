@@ -11,6 +11,8 @@ export type GuardedSessionManager = SessionManager & {
   flushPendingToolResults?: () => void;
   /** Clear pending tool calls without persisting synthetic tool results. Idempotent. */
   clearPendingToolResults?: () => void;
+  /** Inspect pending tool call ids so callers can skip unnecessary idle waits. */
+  getPendingToolCallIds?: () => string[];
 };
 
 /**
@@ -72,5 +74,6 @@ export function guardSessionManager(
   });
   (sessionManager as GuardedSessionManager).flushPendingToolResults = guard.flushPendingToolResults;
   (sessionManager as GuardedSessionManager).clearPendingToolResults = guard.clearPendingToolResults;
+  (sessionManager as GuardedSessionManager).getPendingToolCallIds = guard.getPendingIds;
   return sessionManager as GuardedSessionManager;
 }

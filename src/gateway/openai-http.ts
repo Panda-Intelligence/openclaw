@@ -27,7 +27,7 @@ import type { AuthRateLimiter } from "./auth-rate-limit.js";
 import type { ResolvedGatewayAuth } from "./auth.js";
 import { sendJson, setSseHeaders, writeDone } from "./http-common.js";
 import { handleGatewayPostJsonEndpoint } from "./http-endpoint-helpers.js";
-import { resolveGatewayRequestContext } from "./http-utils.js";
+import { getHeader, resolveGatewayRequestContext } from "./http-utils.js";
 import { normalizeInputHostnameAllowlist } from "./input-allowlist.js";
 
 type OpenAiHttpOptions = {
@@ -466,6 +466,11 @@ export async function handleOpenAiHttpRequest(
   }
 
   const runId = `chatcmpl_${randomUUID()}`;
+  const traceId = getHeader(req, "x-openclaw-trace-id")?.trim() || runId;
+  const startedAt = Date.now();
+  console.log(
+    `[openai-compat] trace=${traceId} runId=${runId} start stream=${stream} model=${model} sessionKey=${sessionKey || "<none>"}`,
+  );
   const deps = createDefaultDeps();
   const commandInput = buildAgentCommandInput({
     prompt: {
@@ -483,6 +488,12 @@ export async function handleOpenAiHttpRequest(
       const result = await agentCommandFromIngress(commandInput, defaultRuntime, deps);
 
       const content = resolveAgentResponseText(result);
+      const payloadCount = Array.isArray((result as { payloads?: unknown[] } | null)?.payloads)
+        ? ((result as { payloads?: unknown[] }).payloads?.length ?? 0)
+        : 0;
+      console.log(
+        `[openai-compat] trace=${traceId} runId=${runId} complete totalMs=${Date.now() - startedAt} payloads=${payloadCount} contentLength=${content.length}`,
+      );
 
       sendJson(res, 200, {
         id: runId,
@@ -500,6 +511,9 @@ export async function handleOpenAiHttpRequest(
       });
     } catch (err) {
       logWarn(`openai-compat: chat completion failed: ${String(err)}`);
+      console.log(
+        `[openai-compat] trace=${traceId} runId=${runId} failed totalMs=${Date.now() - startedAt} error=${String(err)}`,
+      );
       sendJson(res, 500, {
         error: { message: "internal error", type: "api_error" },
       });
@@ -512,6 +526,8 @@ export async function handleOpenAiHttpRequest(
   let wroteRole = false;
   let sawAssistantDelta = false;
   let closed = false;
+  let firstDeltaLogged = false;
+  let completionLogged = false;
 
   const unsubscribe = onAgentEvent((evt) => {
     if (evt.runId !== runId) {
@@ -532,6 +548,12 @@ export async function handleOpenAiHttpRequest(
         writeAssistantRoleChunk(res, { runId, model });
       }
 
+      if (!firstDeltaLogged) {
+        firstDeltaLogged = true;
+        console.log(
+          `[openai-compat] trace=${traceId} runId=${runId} first-delta ms=${Date.now() - startedAt}`,
+        );
+      }
       sawAssistantDelta = true;
       writeAssistantContentChunk(res, {
         runId,
@@ -545,6 +567,12 @@ export async function handleOpenAiHttpRequest(
     if (evt.stream === "lifecycle") {
       const phase = evt.data?.phase;
       if (phase === "end" || phase === "error") {
+        if (!completionLogged) {
+          completionLogged = true;
+          console.log(
+            `[openai-compat] trace=${traceId} runId=${runId} lifecycle=${String(phase)} totalMs=${Date.now() - startedAt}`,
+          );
+        }
         closed = true;
         unsubscribe();
         writeDone(res);
@@ -573,6 +601,12 @@ export async function handleOpenAiHttpRequest(
         }
 
         const content = resolveAgentResponseText(result);
+        if (!firstDeltaLogged) {
+          firstDeltaLogged = true;
+          console.log(
+            `[openai-compat] trace=${traceId} runId=${runId} synthesized-first-delta ms=${Date.now() - startedAt}`,
+          );
+        }
 
         sawAssistantDelta = true;
         writeAssistantContentChunk(res, {
@@ -600,6 +634,12 @@ export async function handleOpenAiHttpRequest(
       });
     } finally {
       if (!closed) {
+        if (!completionLogged) {
+          completionLogged = true;
+          console.log(
+            `[openai-compat] trace=${traceId} runId=${runId} stream-finalize totalMs=${Date.now() - startedAt}`,
+          );
+        }
         closed = true;
         unsubscribe();
         writeDone(res);

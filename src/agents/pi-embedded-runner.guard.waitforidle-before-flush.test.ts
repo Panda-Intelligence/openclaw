@@ -138,4 +138,20 @@ describe("flushPendingToolResultsAfterIdle", () => {
     });
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it("skips idle wait when there are no pending tool calls", async () => {
+    const sm = guardSessionManager(SessionManager.inMemory());
+    const waitForIdle = vi.fn(() => new Promise<void>(() => {}));
+    vi.useFakeTimers();
+
+    const flushPromise = flushPendingToolResultsAfterIdle({
+      agent: { waitForIdle },
+      sessionManager: sm,
+      timeoutMs: 30_000,
+    });
+
+    await expect(flushPromise).resolves.toBeUndefined();
+    expect(waitForIdle).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });
