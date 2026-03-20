@@ -13,12 +13,20 @@ import * as credentialsModule from "./credentials.js";
 import * as sdkModule from "./sdk.js";
 
 const saveMatrixCredentialsMock = vi.hoisted(() => vi.fn());
+const touchMatrixCredentialsMock = vi.hoisted(() => vi.fn());
 
 vi.mock("./credentials.js", () => ({
   loadMatrixCredentials: vi.fn(() => null),
-  saveMatrixCredentials: saveMatrixCredentialsMock,
   credentialsMatchConfig: vi.fn(() => false),
-  touchMatrixCredentials: vi.fn(),
+}));
+
+vi.mock("./credentials.runtime.js", () => ({
+  saveMatrixCredentials: saveMatrixCredentialsMock,
+  touchMatrixCredentials: touchMatrixCredentialsMock,
+  matrixCredentialsRuntime: {
+    saveMatrixCredentials: saveMatrixCredentialsMock,
+    touchMatrixCredentials: touchMatrixCredentialsMock,
+  },
 }));
 
 describe("resolveMatrixConfig", () => {
@@ -328,6 +336,7 @@ describe("resolveMatrixAuth", () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     saveMatrixCredentialsMock.mockReset();
+    touchMatrixCredentialsMock.mockReset();
   });
 
   it("uses the hardened client request path for password login and persists deviceId", async () => {

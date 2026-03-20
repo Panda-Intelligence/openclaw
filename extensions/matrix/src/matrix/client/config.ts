@@ -1,3 +1,4 @@
+import { createLazyRuntimeNamedExport } from "openclaw/plugin-sdk/lazy-runtime";
 import {
   requiresExplicitMatrixDefaultAccount,
   resolveMatrixDefaultOrOnlyAccountId,
@@ -19,9 +20,15 @@ import {
   listNormalizedMatrixAccountIds,
 } from "../account-config.js";
 import { resolveMatrixConfigFieldPath } from "../config-update.js";
+import { credentialsMatchConfig, loadMatrixCredentials } from "../credentials.js";
 import { MatrixClient } from "../sdk.js";
 import { ensureMatrixSdkLoggingConfigured } from "./logging.js";
 import type { MatrixAuth, MatrixResolvedConfig } from "./types.js";
+
+const loadMatrixCredentialsRuntime = createLazyRuntimeNamedExport(
+  () => import("../credentials.runtime.js"),
+  "matrixCredentialsRuntime",
+);
 
 function clean(value: unknown, path: string): string {
   return normalizeResolvedSecretInputString({ value, path }) ?? "";
@@ -339,12 +346,7 @@ export async function resolveMatrixAuth(params?: {
   const { cfg, env, accountId, resolved } = resolveMatrixAuthContext(params);
   const homeserver = validateMatrixHomeserverUrl(resolved.homeserver);
 
-  const {
-    loadMatrixCredentials,
-    saveMatrixCredentials,
-    credentialsMatchConfig,
-    touchMatrixCredentials,
-  } = await import("../credentials.js");
+  const { saveMatrixCredentials, touchMatrixCredentials } = await loadMatrixCredentialsRuntime();
 
   const cached = loadMatrixCredentials(env, accountId);
   const cachedCredentials =

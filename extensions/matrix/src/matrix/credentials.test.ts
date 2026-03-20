@@ -8,9 +8,8 @@ import {
   loadMatrixCredentials,
   clearMatrixCredentials,
   resolveMatrixCredentialsPath,
-  saveMatrixCredentials,
-  touchMatrixCredentials,
 } from "./credentials.js";
+import { saveMatrixCredentials, touchMatrixCredentials } from "./credentials.runtime.js";
 
 describe("matrix credentials storage", () => {
   const tempDirs: string[] = [];
