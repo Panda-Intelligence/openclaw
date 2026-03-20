@@ -30,6 +30,13 @@ describe("bundled plugin runtime dependencies", () => {
     expectPluginOwnsRuntimeDep("extensions/memory-lancedb/package.json", "@lancedb/lancedb");
   });
 
+  it("keeps Matrix runtime deps plugin-local so packaged installs fetch the native crypto loader on demand", () => {
+    expectPluginOwnsRuntimeDep(
+      "extensions/matrix/package.json",
+      "@matrix-org/matrix-sdk-crypto-nodejs",
+    );
+  });
+
   it("keeps bundled Discord runtime deps plugin-local instead of mirroring them into the root package", () => {
     expectPluginOwnsRuntimeDep("extensions/discord/package.json", "@buape/carbon");
   });

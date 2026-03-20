@@ -197,7 +197,11 @@ export default defineConfig([
     // and bundled hooks in one graph so runtime singletons are emitted once.
     entry: buildUnifiedDistEntries(),
     deps: {
-      neverBundle: ["@lancedb/lancedb"],
+      neverBundle: [
+        "@lancedb/lancedb",
+        // Matrix 原生 crypto loader 依赖 CommonJS `__dirname`，必须保留真实运行时边界。
+        "@matrix-org/matrix-sdk-crypto-nodejs",
+      ],
     },
   }),
 ]);

@@ -4,6 +4,9 @@ import tsdownConfig from "../../tsdown.config.ts";
 type TsdownConfigEntry = {
   entry?: Record<string, string> | string[];
   outDir?: string;
+  deps?: {
+    neverBundle?: string[];
+  };
 };
 
 function asConfigArray(config: unknown): TsdownConfigEntry[] {
@@ -54,5 +57,12 @@ describe("tsdown config", () => {
           : false,
       ),
     ).toBe(false);
+  });
+
+  it("keeps native Matrix crypto outside the bundled dist graph", () => {
+    const configs = asConfigArray(tsdownConfig);
+    const neverBundle = configs.flatMap((config) => config.deps?.neverBundle ?? []);
+
+    expect(neverBundle).toContain("@matrix-org/matrix-sdk-crypto-nodejs");
   });
 });

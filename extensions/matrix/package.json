@@ -11,9 +11,6 @@
     "music-metadata": "^11.11.2",
     "zod": "^4.3.6"
   },
-  "devDependencies": {
-    "openclaw": "workspace:*"
-  },
   "openclaw": {
     "extensions": [
       "./index.ts"
@@ -33,6 +30,9 @@
       "npmSpec": "@openclaw/matrix",
       "localPath": "extensions/matrix",
       "defaultChoice": "npm"
+    },
+    "bundle": {
+      "stageRuntimeDependencies": true
     },
     "releaseChecks": {
       "rootDependencyMirrorAllowlist": [
