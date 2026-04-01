@@ -307,6 +307,32 @@ describe("OpenResponses HTTP API (e2e)", () => {
       expect((optsModelOverride as { model?: string } | undefined)?.model).toBe("openai/gpt-5.4");
       await ensureResponseConsumed(resModelOverride);
 
+      await writeGatewayConfig({
+        agents: {
+          defaults: {
+            model: { primary: "openrouter/@preset/free-chat" },
+            models: {
+              "openrouter/@preset/free-chat": {},
+            },
+          },
+        },
+      });
+      mockAgentOnce([{ text: "hello" }]);
+      const resProviderModel = await postResponses(port, {
+        model: "openrouter/@preset/free-chat",
+        input: "hi",
+      });
+      expect(resProviderModel.status).toBe(200);
+      const optsProviderModel = (agentCommand.mock.calls[0] as unknown[] | undefined)?.[0];
+      expect((optsProviderModel as { sessionKey?: string } | undefined)?.sessionKey ?? "").toMatch(
+        /^agent:main:/,
+      );
+      expect((optsProviderModel as { model?: string } | undefined)?.model).toBe(
+        "openrouter/@preset/free-chat",
+      );
+      await ensureResponseConsumed(resProviderModel);
+      await writeGatewayConfig({});
+
       agentCommand.mockClear();
       const resInvalidOverride = await postResponses(
         port,

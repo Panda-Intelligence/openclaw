@@ -76,23 +76,33 @@ export async function resolveOpenAiCompatModelOverride(params: {
   model: string | undefined;
 }): Promise<{ modelOverride?: string; errorMessage?: string }> {
   const requestModel = params.model?.trim();
+  const raw = getHeader(params.req, "x-openclaw-model")?.trim();
+  let requestedModelOverride: string | undefined;
   if (requestModel && !resolveAgentIdFromModel(requestModel)) {
-    return {
-      errorMessage: "Invalid `model`. Use `openclaw` or `openclaw/<agentId>`.",
-    };
+    const slash = requestModel.indexOf("/");
+    const provider = slash === -1 ? "" : requestModel.slice(0, slash).trim();
+    const model = slash === -1 ? "" : requestModel.slice(slash + 1).trim();
+    if (!provider || !model) {
+      return {
+        errorMessage: "Invalid `model`. Use `openclaw` or `openclaw/<agentId>`.",
+      };
+    }
+    requestedModelOverride = requestModel;
   }
 
-  const raw = getHeader(params.req, "x-openclaw-model")?.trim();
-  if (!raw) {
+  const rawOverride = raw || requestedModelOverride;
+  if (!rawOverride) {
     return {};
   }
 
   const cfg = loadConfig();
-  const defaultModelRef = resolveDefaultModelForAgent({ cfg, agentId: params.agentId });
-  const defaultProvider = defaultModelRef.provider;
-  const parsed = parseModelRef(raw, defaultProvider);
+  const defaultProvider = resolveDefaultModelForAgent({
+    cfg,
+    agentId: params.agentId,
+  }).provider;
+  const parsed = parseModelRef(rawOverride, defaultProvider);
   if (!parsed) {
-    return { errorMessage: "Invalid `x-openclaw-model`." };
+    return { errorMessage: raw ? "Invalid `x-openclaw-model`." : "Invalid `model`." };
   }
 
   const catalog = await loadGatewayModelCatalog();
@@ -113,7 +123,7 @@ export async function resolveOpenAiCompatModelOverride(params: {
     };
   }
 
-  return { modelOverride: raw };
+  return { modelOverride: rawOverride };
 }
 
 export function resolveAgentIdForRequest(params: {

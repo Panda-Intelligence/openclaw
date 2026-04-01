@@ -14,12 +14,7 @@ import type { AuthRateLimiter } from "./auth-rate-limit.js";
 import type { ResolvedGatewayAuth } from "./auth.js";
 import { sendJson } from "./http-common.js";
 import { handleGatewayPostJsonEndpoint } from "./http-endpoint-helpers.js";
-import {
-  OPENCLAW_MODEL_ID,
-  getHeader,
-  resolveAgentIdForRequest,
-  resolveAgentIdFromModel,
-} from "./http-utils.js";
+import { resolveAgentIdForRequest, resolveOpenAiCompatModelOverride } from "./http-utils.js";
 
 type OpenAiEmbeddingsHttpOptions = {
   auth: ResolvedGatewayAuth;
@@ -154,16 +149,6 @@ export async function handleOpenAiEmbeddingsHttpRequest(
   }
 
   const cfg = loadConfig();
-  if (requestModel !== OPENCLAW_MODEL_ID && !resolveAgentIdFromModel(requestModel, cfg)) {
-    sendJson(res, 400, {
-      error: {
-        message: "Invalid `model`. Use `openclaw` or `openclaw/<agentId>`.",
-        type: "invalid_request_error",
-      },
-    });
-    return true;
-  }
-
   const texts = resolveInputTexts(payload.input);
   if (!texts) {
     sendJson(res, 400, {
@@ -183,10 +168,24 @@ export async function handleOpenAiEmbeddingsHttpRequest(
   }
 
   const agentId = resolveAgentIdForRequest({ req, model: requestModel });
+  const { modelOverride, errorMessage: modelError } = await resolveOpenAiCompatModelOverride({
+    req,
+    agentId,
+    model: requestModel,
+  });
+  if (modelError) {
+    sendJson(res, 400, {
+      error: {
+        message: modelError,
+        type: "invalid_request_error",
+      },
+    });
+    return true;
+  }
   const agentDir = resolveAgentDir(cfg, agentId);
   const memorySearch = resolveMemorySearchConfig(cfg, agentId);
   const configuredProvider = (memorySearch?.provider ?? "openai") as EmbeddingProviderRequest;
-  const overrideModel = getHeader(req, "x-openclaw-model")?.trim() || memorySearch?.model || "";
+  const overrideModel = modelOverride || memorySearch?.model || "";
   const target = resolveEmbeddingsTarget({ requestModel: overrideModel, configuredProvider });
   if ("errorMessage" in target) {
     sendJson(res, 400, {

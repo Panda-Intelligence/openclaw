@@ -127,6 +127,24 @@ describe("OpenAI-compatible embeddings HTTP API (e2e)", () => {
     expect(lastCall?.agentDir).toBe(resolveAgentDir({}, "beta"));
   });
 
+  it("accepts provider models as default-agent overrides", async () => {
+    const res = await postEmbeddings({
+      model: "openai/text-embedding-3-small",
+      input: "hello",
+    });
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { model?: string };
+    expect(json.model).toBe("openai/text-embedding-3-small");
+    const lastCall = createEmbeddingProviderMock.mock.calls.at(-1)?.[0] as
+      | { provider?: string; model?: string; agentDir?: string }
+      | undefined;
+    expect(lastCall).toMatchObject({
+      provider: "openai",
+      model: "text-embedding-3-small",
+      agentDir: resolveAgentDir({}, "main"),
+    });
+  });
+
   it("rejects invalid input shapes", async () => {
     const res = await postEmbeddings({
       model: "openclaw/default",
@@ -137,7 +155,7 @@ describe("OpenAI-compatible embeddings HTTP API (e2e)", () => {
     expect(json.error?.type).toBe("invalid_request_error");
   });
 
-  it("rejects invalid agent targets", async () => {
+  it("rejects disallowed provider overrides in the model field", async () => {
     const res = await postEmbeddings({
       model: "ollama/nomic-embed-text",
       input: "hello",
@@ -146,7 +164,7 @@ describe("OpenAI-compatible embeddings HTTP API (e2e)", () => {
     const json = (await res.json()) as { error?: { type?: string; message?: string } };
     expect(json.error).toEqual({
       type: "invalid_request_error",
-      message: "Invalid `model`. Use `openclaw` or `openclaw/<agentId>`.",
+      message: "This agent does not allow that embedding provider on `/v1/embeddings`.",
     });
   });
 

@@ -302,6 +302,34 @@ describe("OpenAI-compatible HTTP API (e2e)", () => {
       }
 
       {
+        await writeGatewayConfig({
+          agents: {
+            defaults: {
+              model: { primary: "openrouter/@preset/free-chat" },
+              models: {
+                "openrouter/@preset/free-chat": {},
+              },
+            },
+          },
+        });
+        mockAgentOnce([{ text: "hello" }]);
+        const res = await postChatCompletions(port, {
+          model: "openrouter/@preset/free-chat",
+          messages: [{ role: "user", content: "hi" }],
+        });
+        expect(res.status).toBe(200);
+        const opts = (agentCommand.mock.calls[0] as unknown[] | undefined)?.[0];
+        expect((opts as { sessionKey?: string } | undefined)?.sessionKey ?? "").toMatch(
+          /^agent:main:/,
+        );
+        expect((opts as { model?: string } | undefined)?.model).toBe(
+          "openrouter/@preset/free-chat",
+        );
+        await res.text();
+        await writeGatewayConfig({});
+      }
+
+      {
         agentCommand.mockClear();
         const res = await postChatCompletions(port, {
           model: "openai/",
