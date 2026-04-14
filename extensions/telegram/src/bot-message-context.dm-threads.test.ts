@@ -1,15 +1,36 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+const { recordInboundSessionMock } = vi.hoisted(() => ({
+  recordInboundSessionMock: vi.fn().mockResolvedValue(undefined),
+}));
 
-let buildTelegramMessageContextForTest: typeof import("./bot-message-context.test-harness.js").buildTelegramMessageContextForTest;
-let clearRuntimeConfigSnapshot: typeof import("../../../src/config/config.js").clearRuntimeConfigSnapshot;
-let setRuntimeConfigSnapshot: typeof import("../../../src/config/config.js").setRuntimeConfigSnapshot;
-
-beforeAll(async () => {
-  vi.resetModules();
-  ({ buildTelegramMessageContextForTest } = await import("./bot-message-context.test-harness.js"));
-  ({ clearRuntimeConfigSnapshot, setRuntimeConfigSnapshot } =
-    await import("../../../src/config/config.js"));
+vi.mock("./bot-message-context.session.runtime.js", async () => {
+  const actual = await vi.importActual<typeof import("./bot-message-context.session.runtime.js")>(
+    "./bot-message-context.session.runtime.js",
+  );
+  return {
+    ...actual,
+    recordInboundSession: (...args: unknown[]) => recordInboundSessionMock(...args),
+  };
 });
+
+vi.mock("./bot-message-context.body.js", () => ({
+  resolveTelegramInboundBody: async () => ({
+    bodyText: "hello",
+    rawBody: "hello",
+    historyKey: undefined,
+    commandAuthorized: false,
+    effectiveWasMentioned: true,
+    canDetectMention: false,
+    shouldBypassMention: false,
+    stickerCacheHit: false,
+    locationData: undefined,
+  }),
+}));
+
+const { buildTelegramMessageContextForTest } =
+  await import("./bot-message-context.test-harness.js");
+const { clearRuntimeConfigSnapshot, setRuntimeConfigSnapshot } =
+  await import("openclaw/plugin-sdk/config-runtime");
 
 beforeEach(() => {
   clearRuntimeConfigSnapshot();
@@ -17,6 +38,7 @@ beforeEach(() => {
 
 afterEach(() => {
   clearRuntimeConfigSnapshot();
+  recordInboundSessionMock.mockClear();
 });
 
 describe("buildTelegramMessageContext dm thread sessions", () => {
@@ -120,6 +142,24 @@ describe("buildTelegramMessageContext group sessions without forum", () => {
     // Session key SHOULD include :topic:99 for forums
     expect(ctx?.ctxPayload?.SessionKey).toBe("agent:main:telegram:group:-1001234567890:topic:99");
     expect(ctx?.ctxPayload?.MessageThreadId).toBe(99);
+  });
+
+  it("surfaces topic name from reply_to_message forum metadata", async () => {
+    const ctx = await buildContext({
+      message_id: 3,
+      chat: { id: -1001234567890, type: "supergroup", title: "Test Forum", is_forum: true },
+      date: 1700000002,
+      text: "@bot hello",
+      message_thread_id: 99,
+      from: { id: 42, first_name: "Alice" },
+      reply_to_message: {
+        message_id: 2,
+        forum_topic_created: { name: "Deployments", icon_color: 0x6fb9f0 },
+      },
+    });
+
+    expect(ctx).not.toBeNull();
+    expect(ctx?.ctxPayload?.TopicName).toBe("Deployments");
   });
 });
 

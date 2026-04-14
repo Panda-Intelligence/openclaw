@@ -1,16 +1,19 @@
 import type { IncomingMessage } from "node:http";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { OpenClawConfig } from "../config/config.js";
 
 const loadConfigMock = vi.fn();
 const loadGatewayModelCatalogMock = vi.fn();
 
 vi.mock("../config/config.js", () => ({
-  loadConfig: loadConfigMock,
+  loadConfig: () => loadConfigMock(),
 }));
 
 vi.mock("./server-model-catalog.js", () => ({
-  loadGatewayModelCatalog: loadGatewayModelCatalogMock,
+  loadGatewayModelCatalog: () => loadGatewayModelCatalogMock(),
 }));
+
+import { resolveOpenAiCompatModelOverride } from "./http-utils.js";
 
 function createReq(headers: Record<string, string> = {}): IncomingMessage {
   return { headers } as IncomingMessage;
@@ -18,70 +21,30 @@ function createReq(headers: Record<string, string> = {}): IncomingMessage {
 
 describe("resolveOpenAiCompatModelOverride", () => {
   beforeEach(() => {
-    loadConfigMock.mockReset();
-    loadGatewayModelCatalogMock.mockReset();
-    loadConfigMock.mockReturnValue({
+    loadConfigMock.mockReset().mockReturnValue({
       agents: {
         defaults: {
-          model: { primary: "openrouter/@preset/free-chat" },
+          model: { primary: "openai/gpt-5.4" },
           models: {
-            "openrouter/@preset/free-chat": {},
-            "openai/text-embedding-3-small": {},
+            "openai/gpt-5.4": {},
           },
         },
       },
-    });
-    loadGatewayModelCatalogMock.mockResolvedValue([
-      {
-        provider: "openrouter",
-        id: "@preset/free-chat",
-        name: "Free Chat",
-      },
-      {
-        provider: "openai",
-        id: "text-embedding-3-small",
-        name: "text-embedding-3-small",
-      },
-    ]);
+    } satisfies OpenClawConfig);
+    loadGatewayModelCatalogMock
+      .mockReset()
+      .mockResolvedValue([{ id: "gpt-5.4", name: "GPT 5.4", provider: "openai" }]);
   });
 
-  it("keeps standard openclaw routing requests untouched", async () => {
-    const { resolveOpenAiCompatModelOverride } = await import("./http-utils.js");
-
+  it("rejects CLI model overrides outside the configured allowlist", async () => {
     await expect(
       resolveOpenAiCompatModelOverride({
-        req: createReq(),
+        req: createReq({ "x-openclaw-model": "claude-cli/opus" }),
         agentId: "main",
-        model: "openclaw/default",
-      }),
-    ).resolves.toEqual({});
-  });
-
-  it("treats provider or preset model ids as request-level overrides", async () => {
-    const { resolveOpenAiCompatModelOverride } = await import("./http-utils.js");
-
-    await expect(
-      resolveOpenAiCompatModelOverride({
-        req: createReq(),
-        agentId: "main",
-        model: "openrouter/@preset/free-chat",
+        model: "openclaw",
       }),
     ).resolves.toEqual({
-      modelOverride: "openrouter/@preset/free-chat",
-    });
-  });
-
-  it("lets x-openclaw-model take precedence over the request model", async () => {
-    const { resolveOpenAiCompatModelOverride } = await import("./http-utils.js");
-
-    await expect(
-      resolveOpenAiCompatModelOverride({
-        req: createReq({ "x-openclaw-model": "openai/text-embedding-3-small" }),
-        agentId: "main",
-        model: "openrouter/@preset/free-chat",
-      }),
-    ).resolves.toEqual({
-      modelOverride: "openai/text-embedding-3-small",
+      errorMessage: "Model 'claude-cli/opus' is not allowed for agent 'main'.",
     });
   });
 });
